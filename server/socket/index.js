@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const aiRouter = require('../ai/router');
 
 function initSocket(io) {
   // authenticate every socket connection via token
@@ -62,8 +63,9 @@ function initSocket(io) {
         createdAt: message.createdAt,
       });
 
-      // Phase 2: AI pipeline hook goes here
-      // await aiRouter(io, socket, roomId, message);
+      aiRouter.handleMessage(io, socket, roomId, message).catch((err) => {
+        console.error('[socket] AI router error:', err);
+      });
     });
 
     // ── typing indicators ────────────────────────────────────
