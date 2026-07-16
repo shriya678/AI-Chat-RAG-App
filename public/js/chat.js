@@ -43,11 +43,59 @@ function bindSocketEvents() {
     document.getElementById('typing-indicator').classList.add('hidden');
   });
 
-  // Phase 2: AI streaming events will be added here
-  // socket.on('ai:token', ...)
-  // socket.on('ai:done', ...)
-  // socket.on('summary:ready', ...)
-  // socket.on('replies:suggest', ...)
+  // AI streaming events (Iteration 2)
+  socket.on('ai:typing', () => {
+    const el = document.getElementById('typing-indicator');
+    el.textContent = 'AI Assistant is typing...';
+    el.classList.remove('hidden');
+  });
+
+  socket.on('ai:token', ({ delta }) => {
+    let wrapper = document.getElementById('ai-streaming-bubble');
+    if (!wrapper) wrapper = createStreamingBubble();
+    const bubble = wrapper.querySelector('.message-bubble');
+    bubble.textContent = (bubble.textContent || '') + delta;
+    scrollToBottom();
+  });
+
+  socket.on('ai:done', (msg) => {
+    const wrapper = document.getElementById('ai-streaming-bubble');
+    if (wrapper) {
+      wrapper.querySelector('.message-bubble').textContent = msg.text;
+      wrapper.removeAttribute('id');
+      wrapper.dataset.messageId = msg._id;
+    } else {
+      appendMessage(msg);
+    }
+    document.getElementById('typing-indicator').classList.add('hidden');
+  });
+
+  socket.on('ai:error', ({ message }) => {
+    const wrapper = document.getElementById('ai-streaming-bubble');
+    if (wrapper) wrapper.remove();
+    appendSystem(`AI error: ${message}`);
+    document.getElementById('typing-indicator').classList.add('hidden');
+  });
+}
+
+function createStreamingBubble() {
+  const container = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.id = 'ai-streaming-bubble';
+  div.classList.add('message', 'ai');
+
+  const meta = document.createElement('div');
+  meta.className = 'message-meta';
+  meta.textContent = 'AI Assistant';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+
+  div.appendChild(meta);
+  div.appendChild(bubble);
+  container.appendChild(div);
+  scrollToBottom();
+  return div;
 }
 
 // ── rooms ──────────────────────────────────────────────────
