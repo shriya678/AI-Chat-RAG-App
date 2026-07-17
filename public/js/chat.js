@@ -17,6 +17,14 @@ window.startChat = function () {
 function bindSocketEvents() {
   socket.on('connect_error', (err) => {
     console.error('Socket error:', err.message);
+    // If the server rejected us for an auth-shaped reason, our stored token
+    // is useless. Wipe it and reload back to the login screen instead of
+    // sitting on an empty chat with no explanation.
+    const AUTH_ERRORS = ['Authentication required', 'Invalid token', 'User no longer exists'];
+    if (AUTH_ERRORS.includes(err.message)) {
+      sessionStorage.clear();
+      window.location.reload();
+    }
   });
 
   socket.on('message:new', (msg) => {
