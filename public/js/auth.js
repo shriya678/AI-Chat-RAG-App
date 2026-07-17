@@ -33,6 +33,15 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   }
 });
 
+// Restore session on page reload — if we already have a token in
+// sessionStorage from a previous login in this tab, skip the auth screen
+// and jump straight into the chat.
+document.addEventListener('DOMContentLoaded', () => {
+  if (sessionStorage.getItem('token') && typeof window.startChat === 'function') {
+    window.startChat();
+  }
+});
+
 document.getElementById('register-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const username = document.getElementById('reg-username').value;
