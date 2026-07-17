@@ -8,6 +8,7 @@ const path = require('path');
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
 const roomRoutes = require('./routes/rooms');
+const documentRoutes = require('./routes/documents');
 const initSocket = require('./socket/index');
 
 const app = express();
@@ -22,6 +23,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/rooms', documentRoutes);
 
 // global error handler
 app.use((err, req, res, next) => {
