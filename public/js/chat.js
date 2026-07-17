@@ -3,14 +3,22 @@ let activeRoomId = null;
 const token = () => sessionStorage.getItem('token');
 const username = () => sessionStorage.getItem('username');
 
-window.startChat = function () {
+window.startChat = async function () {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('chat-screen').classList.remove('hidden');
   document.getElementById('current-username').textContent = username();
 
   socket = io({ auth: { token: token() } });
   bindSocketEvents();
-  loadRooms();
+  const rooms = await loadRooms();
+
+  // Restore last-active room if we're returning from a refresh.
+  // Guard against a stored id that no longer resolves (room deleted).
+  const savedRoomId = sessionStorage.getItem('activeRoomId');
+  if (savedRoomId) {
+    const room = rooms.find((r) => r._id === savedRoomId);
+    if (room) joinRoom(room);
+  }
 };
 
 // ── socket events ──────────────────────────────────────────
@@ -115,6 +123,7 @@ async function loadRooms() {
   const list = document.getElementById('room-list');
   list.innerHTML = '';
   rooms.forEach(addRoomToList);
+  return rooms;
 }
 
 function addRoomToList(room) {
@@ -133,6 +142,7 @@ async function joinRoom(room) {
   if (activeRoomId) socket.emit('room:leave', { roomId: activeRoomId });
 
   activeRoomId = room._id;
+  sessionStorage.setItem('activeRoomId', room._id);
 
   document.querySelectorAll('#room-list li').forEach(li => li.classList.remove('active'));
   document.querySelector(`#room-list li[data-id="${room._id}"]`).classList.add('active');
