@@ -4,13 +4,19 @@ const User = require('../models/User');
 const aiRouter = require('../ai/router');
 
 function initSocket(io) {
-  // authenticate every socket connection via token
-  io.use((socket, next) => {
+  // authenticate every socket connection: verify JWT signature AND confirm
+  // the user still exists in the database. The DB check prevents "ghost user"
+  // sessions where a JWT signed for a now-deleted (or wrong-database) user
+  // silently succeeds because JWT verification is stateless.
+  io.use(async (socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) return next(new Error('Authentication required'));
 
     try {
-      socket.user = jwt.verify(token, process.env.JWT_SECRET);
+      const payload = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(payload.id).select('_id username').lean();
+      if (!user) return next(new Error('User no longer exists'));
+      socket.user = { id: user._id.toString(), username: user.username };
       next();
     } catch {
       next(new Error('Invalid token'));
