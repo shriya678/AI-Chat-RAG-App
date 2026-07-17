@@ -14,7 +14,7 @@ Iteration 1 (the current state) delivered a real-time multi-room chat with JWT a
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Provider | **Ollama (local)** with `llama3.1:8b` | Zero cost, runs on the dev's own machine (16GB+ RAM). Trade some reply quality for free unlimited testing during learning. Swappable — `provider.js` is an adapter. |
+| Provider | **Google Gemini** with `gemini-2.5-flash` | Free tier, cloud-hosted so it deploys anywhere. Switched from Ollama for deployment compatibility — Ollama can't run on free-tier cloud hosts. Swappable — `provider.js` is an adapter. |
 | Trigger | `@ai` mention (case-insensitive) | Matches README roadmap; predictable cost; no surprise AI responses. |
 | Streaming | Yes, via Socket.IO `ai:token` / `ai:done` events | Frontend stubs already sketched; snappier UX. |
 | Context window | Last 20 room messages | Enough for coherent short chats without blowing tokens. Tunable via env var. |
