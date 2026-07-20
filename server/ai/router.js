@@ -1,5 +1,6 @@
 const Message = require('../models/Message');
 const { streamReply } = require('./provider');
+const { retrieveContext } = require('./rag');
 
 const MENTION_REGEX = /@ai\b/i;
 const COOLDOWN_MS = 5000;
@@ -10,6 +11,22 @@ Users mention you with "@ai" to ask questions or make requests.
 Reply concisely and directly — you're in a chat, not writing an essay.
 Do not include a preamble like "Sure!" or "I'd be happy to help!" — just answer.
 If a question is ambiguous, ask one short clarifying question.`;
+
+function buildRagSystemPrompt(chunks) {
+  const excerpts = chunks
+    .map((c) => `[source: ${c.source}]\n${c.text}`)
+    .join('\n\n');
+  return `${SYSTEM_PROMPT}
+
+The following excerpts from the room's uploaded documents may be relevant to the current question. Each excerpt is labeled with its source file.
+
+${excerpts}
+
+Rules for using the excerpts:
+- If your answer draws on the excerpts, end your reply with a line: "Sources: <comma-separated unique filenames>"
+- If the excerpts aren't relevant to the question, ignore them and don't include a Sources line.
+- Never invent quotations or facts; if the excerpts don't contain the answer, say so.`;
+}
 
 const cooldowns = new Map();
 
@@ -36,10 +53,25 @@ async function handleMessage(io, socket, roomId, triggerMessage) {
       .map((m) => `[${m.isAI ? 'AI Assistant' : m.username}]: ${m.text}`)
       .join('\n');
 
+    // Try to pull relevant document excerpts from the room's knowledge base.
+    // If retrieval fails (e.g. embedding API down), fall through to a non-RAG
+    // reply rather than failing the whole @ai turn.
+    let ragChunks = [];
+    try {
+      const result = await retrieveContext({ roomId, query: triggerMessage.text });
+      ragChunks = result.chunks;
+    } catch (err) {
+      console.warn('[AI router] RAG retrieval failed, continuing without context:', err.message);
+    }
+
+    const systemPrompt = ragChunks.length > 0
+      ? buildRagSystemPrompt(ragChunks)
+      : SYSTEM_PROMPT;
+
     io.to(roomId).emit('ai:typing');
 
     const reply = await streamReply({
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [
         {
           role: 'user',
