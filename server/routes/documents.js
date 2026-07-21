@@ -65,4 +65,18 @@ router.get('/:roomId/documents', authMiddleware, async (req, res) => {
   }
 });
 
+// DELETE /api/rooms/:roomId/documents/:documentId  — remove all chunks of one uploaded file
+router.delete('/:roomId/documents/:documentId', authMiddleware, async (req, res) => {
+  try {
+    const result = await DocumentChunk.deleteMany({
+      roomId: req.params.roomId,
+      documentId: req.params.documentId,
+    });
+    res.json({ deleted: result.deletedCount });
+  } catch (err) {
+    console.error('[documents] delete error:', err.message);
+    res.status(500).json({ message: 'Failed to delete document' });
+  }
+});
+
 module.exports = router;
