@@ -162,6 +162,9 @@ async function joinRoom(room) {
   const history = await res.json();
   history.forEach(appendMessage);
   scrollToBottom();
+
+  // Load the room's documents into the sidebar.
+  window.documents.loadDocuments(room._id);
 }
 
 document.getElementById('create-room-btn').addEventListener('click', async () => {
@@ -247,6 +250,7 @@ document.getElementById('message-form').addEventListener('submit', (e) => {
 document.getElementById('logout-btn').addEventListener('click', () => {
   if (socket) socket.disconnect();
   sessionStorage.clear();
+  window.documents.clear();
   document.getElementById('chat-screen').classList.add('hidden');
   document.getElementById('auth-screen').classList.remove('hidden');
   activeRoomId = null;
