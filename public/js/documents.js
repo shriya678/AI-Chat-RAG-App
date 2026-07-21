@@ -43,6 +43,21 @@ window.documents = {
     }
   },
 
+  async deleteDocument(roomId, documentId) {
+    if (!confirm('Delete this document from the room?')) return;
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/documents/${documentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await window.documents.loadDocuments(roomId);
+    } catch (err) {
+      console.error('[documents] delete failed:', err);
+      alert('Failed to delete document.');
+    }
+  },
+
   clear() {
     const list = document.getElementById('document-list');
     if (list) list.innerHTML = '';
@@ -62,7 +77,24 @@ function renderDocuments(docs) {
     const li = document.createElement('li');
     li.className = 'doc-item';
     li.title = `${doc.chunks} chunks, uploaded ${new Date(doc.createdAt).toLocaleString()}`;
-    li.textContent = `📄 ${doc.title}`;
+
+    const label = document.createElement('span');
+    label.className = 'doc-item-label';
+    label.textContent = `📄 ${doc.title}`;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'doc-delete-btn';
+    btn.title = 'Delete document';
+    btn.textContent = '🗑';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const roomId = sessionStorage.getItem('activeRoomId');
+      if (roomId) window.documents.deleteDocument(roomId, doc.documentId);
+    });
+
+    li.appendChild(label);
+    li.appendChild(btn);
     list.appendChild(li);
   }
 }

@@ -47,14 +47,13 @@ Deployed on Render + MongoDB Atlas + Gemini free tier at **$0/month**.
 - AI-authored messages saved to MongoDB with `isAI: true`.
 - Provider is behind a `provider.js` adapter — swapping to Claude / Ollama / other is a one-file change.
 
-### Iteration 3 — RAG Layer 🚧 (in progress)
+### Iteration 3 — RAG Layer ✅
 - Upload PDF, TXT, or MD files to a room as a knowledge base.
 - On upload: text extracted, split into overlapping 500-char chunks, embedded via `gemini-embedding-001`, stored in MongoDB.
 - On `@ai` query: question is embedded, cosine-similarity against room chunks, top-3 relevant excerpts injected into the prompt.
 - Model cites sources at the end of the reply when it uses retrieved content (`Sources: file.pdf`).
 - Empty-room queries behave exactly as in Iteration 2 (no forced retrieval).
-
-**Remaining for Iteration 3:** document delete UI + endpoint (planned as Chunk 5).
+- Documents can be deleted from the sidebar — removes all chunks for that upload.
 
 ---
 
@@ -184,6 +183,7 @@ Pagination: `GET /api/rooms/:roomId/messages?before=<ISO timestamp>` — pass th
 |---|---|---|
 | `POST` | `/api/rooms/:roomId/documents` | Upload a document (multipart `file` field). Server extracts text, chunks, embeds, stores. Returns `{ documentId, title, chunks }`. |
 | `GET` | `/api/rooms/:roomId/documents` | List documents in the room. Returns `[{ documentId, title, chunks, createdAt }]`. |
+| `DELETE` | `/api/rooms/:roomId/documents/:documentId` | Remove all chunks belonging to one uploaded file. Returns `{ deleted: <chunkCount> }`. |
 
 Supported formats: PDF, plain text, markdown. Max file size: 5 MB (configurable via `UPLOAD_MAX_FILE_MB`).
 
@@ -285,7 +285,7 @@ Compound index on `{ roomId, documentId }` covers both per-room scans and per-do
 - [x] Provider adapter pattern (`server/ai/provider.js`) — swappable
 - [ ] Catch-up summary: on login, summarize messages since `lastSeen` *(deferred)*
 
-### Iteration 3 — RAG Layer 🚧
+### Iteration 3 — RAG Layer ✅
 - [x] Document ingestion pipeline (PDF via `pdf-parse`, TXT/MD as UTF-8)
 - [x] Chunking (500 chars, 50 overlap; configurable)
 - [x] Embedding generation via `gemini-embedding-001`
@@ -294,5 +294,5 @@ Compound index on `{ roomId, documentId }` covers both per-room scans and per-do
 - [x] Per-room knowledge bases
 - [x] Source citations in AI responses (model-driven)
 - [x] Upload UI in sidebar
-- [ ] Document delete UI + endpoint
+- [x] Document delete UI + endpoint
 - [ ] Atlas Vector Search index *(future — deferred while chunk counts stay small)*
