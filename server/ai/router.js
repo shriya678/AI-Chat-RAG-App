@@ -4,7 +4,9 @@ const { retrieveContext } = require('./rag');
 
 const MENTION_REGEX = /@ai\b/i;
 const COOLDOWN_MS = 5000;
-const CONTEXT_MESSAGES = parseInt(process.env.AI_CONTEXT_MESSAGES, 10) || 20;
+// How many prior turns (user + AI, from THIS user only) to send as
+// conversation context. 6 ≈ 3 full exchanges, tunable via env.
+const CONVERSATION_TURNS = parseInt(process.env.AI_CONVERSATION_TURNS, 10) || 6;
 
 const SYSTEM_PROMPT = `You are an AI assistant participating in a group chat room.
 Users mention you with "@ai" to ask questions or make requests.
@@ -43,15 +45,31 @@ async function handleMessage(io, socket, roomId, triggerMessage) {
   cooldowns.set(userId, now);
 
   try {
-    const history = await Message.find({ roomId })
+    // Load recent conversation between THIS user and the AI in this room.
+    // We deliberately skip other users' messages so the AI sees a clean
+    // 1-on-1 thread instead of jumbled group chatter.
+    const history = await Message.find({
+      roomId,
+      $or: [{ isAI: true }, { userId: socket.user.id }],
+    })
       .sort({ createdAt: -1 })
-      .limit(CONTEXT_MESSAGES)
+      .limit(CONVERSATION_TURNS)
       .lean();
 
-    const transcript = history
+    // Map to role-tagged turns Gemini can consume as a real conversation.
+    // The last item is the triggering @ai message; older items are context.
+    const messages = history
       .reverse()
-      .map((m) => `[${m.isAI ? 'AI Assistant' : m.username}]: ${m.text}`)
-      .join('\n');
+      .map((m) => ({
+        role: m.isAI ? 'assistant' : 'user',
+        content: m.text,
+      }));
+
+    // Guard: a conversation sent to the model must start with a user turn.
+    // If our window happens to open with an assistant message, drop it.
+    while (messages.length > 0 && messages[0].role !== 'user') {
+      messages.shift();
+    }
 
     // Try to pull relevant document excerpts from the room's knowledge base.
     // If retrieval fails (e.g. embedding API down), fall through to a non-RAG
@@ -72,14 +90,7 @@ async function handleMessage(io, socket, roomId, triggerMessage) {
 
     const reply = await streamReply({
       system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content:
-            `Recent chat transcript:\n\n${transcript}\n\n` +
-            `Respond to the latest @ai message. Reply as "AI Assistant".`,
-        },
-      ],
+      messages,
       onToken: (delta) => {
         io.to(roomId).emit('ai:token', { roomId, delta });
       },
