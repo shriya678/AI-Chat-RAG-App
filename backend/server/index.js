@@ -3,7 +3,6 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const path = require('path');
 
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
@@ -11,15 +10,25 @@ const roomRoutes = require('./routes/rooms');
 const documentRoutes = require('./routes/documents');
 const initSocket = require('./socket/index');
 
+// The frontend runs on a different origin (Vite dev server on :5173 locally,
+// Vercel URL in prod). We explicitly whitelist it for both HTTP and WebSocket
+// traffic; browsers block cross-origin calls unless the server opts in.
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: '*' },
+  cors: {
+    origin: FRONTEND_ORIGIN,
+    credentials: true,
+  },
 });
 
-app.use(cors());
+app.use(cors({
+  origin: FRONTEND_ORIGIN,
+  credentials: true,
+}));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
