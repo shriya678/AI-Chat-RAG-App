@@ -12,23 +12,26 @@ const SYSTEM_PROMPT = `You are an AI assistant participating in a group chat roo
 Users mention you with "@ai" to ask questions or make requests.
 Reply concisely and directly — you're in a chat, not writing an essay.
 Do not include a preamble like "Sure!" or "I'd be happy to help!" — just answer.
-If a question is ambiguous, ask one short clarifying question.`;
+If a question is ambiguous, ask one short clarifying question.
 
-function buildRagSystemPrompt(chunks) {
-  const excerpts = chunks
-    .map((c) => `[source: ${c.source}]\n${c.text}`)
-    .join('\n\n');
-  return `${SYSTEM_PROMPT}
+You have access to a search_documents tool that searches the room's uploaded
+documents. Call it ONLY when:
+  - The user asks about specific facts, policies, procedures, names, or
+    content that could reasonably live in an uploaded document, AND
+  - General knowledge alone is unlikely to give a complete or accurate answer.
 
-The following excerpts from the room's uploaded documents may be relevant to the current question. Each excerpt is labeled with its source file.
+Do NOT call it for:
+  - Greetings, small talk, math, general-knowledge questions
+  - Follow-ups already grounded in earlier turns of this conversation
+  - Anything the user is clearly asking as an opinion or preference
 
-${excerpts}
+When your final answer draws on content returned by search_documents, end
+your reply with exactly this line:
+  Sources: <comma-separated unique filenames>
+When you didn't use documents, do not include a Sources line.
 
-Rules for using the excerpts:
-- If your answer draws on the excerpts, end your reply with a line: "Sources: <comma-separated unique filenames>"
-- If the excerpts aren't relevant to the question, ignore them and don't include a Sources line.
-- Never invent quotations or facts; if the excerpts don't contain the answer, say so.`;
-}
+Never invent facts or quotations. If the documents don't contain the answer,
+say so plainly.`;
 
 const cooldowns = new Map();
 
@@ -71,26 +74,55 @@ async function handleMessage(io, socket, roomId, triggerMessage) {
       messages.shift();
     }
 
-    // Try to pull relevant document excerpts from the room's knowledge base.
-    // If retrieval fails (e.g. embedding API down), fall through to a non-RAG
-    // reply rather than failing the whole @ai turn.
-    let ragChunks = [];
-    try {
-      const result = await retrieveContext({ roomId, query: triggerMessage.text });
-      ragChunks = result.chunks;
-    } catch (err) {
-      console.warn('[AI router] RAG retrieval failed, continuing without context:', err.message);
-    }
-
-    const systemPrompt = ragChunks.length > 0
-      ? buildRagSystemPrompt(ragChunks)
-      : SYSTEM_PROMPT;
+    // The search_documents tool is closed over the current roomId so the
+    // model can pass just a query — it doesn't need to know about rooms.
+    const searchDocumentsTool = {
+      declaration: {
+        name: 'search_documents',
+        description:
+          "Search the room's uploaded documents for content relevant to a question. " +
+          'Returns up to a few short excerpts, each tagged with its source filename. ' +
+          'Returns an empty list if no documents are uploaded or nothing matches.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description:
+                'A natural-language search query. Rephrase the user question if that helps retrieval.',
+            },
+          },
+          required: ['query'],
+        },
+      },
+      execute: async ({ query }) => {
+        try {
+          const result = await retrieveContext({ roomId, query });
+          if (!result.chunks.length) {
+            return {
+              excerpts: [],
+              note: 'No documents in this room or no relevant content found.',
+            };
+          }
+          return {
+            excerpts: result.chunks.map((c) => ({
+              source: c.source,
+              text: c.text,
+            })),
+          };
+        } catch (err) {
+          console.warn('[AI router] search_documents error:', err.message);
+          return { error: 'Search failed', excerpts: [] };
+        }
+      },
+    };
 
     io.to(roomId).emit('ai:typing');
 
     const reply = await streamReply({
-      system: systemPrompt,
+      system: SYSTEM_PROMPT,
       messages,
+      tools: [searchDocumentsTool],
       onToken: (delta) => {
         io.to(roomId).emit('ai:token', { roomId, delta });
       },
