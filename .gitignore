@@ -1,3 +1,7 @@
 .env
 node_modules/
 test.txt
+
+# Personal / private docs — not for the repo
+REFACTOR_PLAN.md
+INTERVIEW_PREP.md
