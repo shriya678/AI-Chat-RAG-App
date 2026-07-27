@@ -46,15 +46,26 @@ async function streamReply({ system, messages, onToken, tools }) {
 
     let iterationText = '';
     const toolCalls = [];
+    // Preserve EVERY part Gemini returns verbatim. thoughtSignature is a
+    // SIBLING of functionCall on the same part (not inside it), so we cannot
+    // reconstruct parts as { functionCall: tc } — that would still drop the
+    // signature. Only round-tripping the raw parts preserves everything the
+    // model needs (thoughtSignature, thought flags, future metadata fields).
+    const modelResponseParts = [];
 
     for await (const chunk of stream) {
-      const delta = chunk.text;
-      if (delta) {
-        iterationText += delta;
-        onToken(delta);
-      }
-      if (chunk.functionCalls?.length) {
-        toolCalls.push(...chunk.functionCalls);
+      const parts = chunk.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        modelResponseParts.push(part);
+        // Stream visible text to the caller. Skip "thought" parts (internal
+        // reasoning) — those are for round-trip only, not user output.
+        if (part.text && !part.thought) {
+          iterationText += part.text;
+          onToken(part.text);
+        }
+        if (part.functionCall) {
+          toolCalls.push(part.functionCall);
+        }
       }
     }
 
@@ -66,15 +77,11 @@ async function streamReply({ system, messages, onToken, tools }) {
 
     // Model asked us to call one or more tools. We need to:
     // 1. Append the model's tool-call turn to the conversation.
+    //    (Send raw parts back so thoughtSignature stays attached.)
     // 2. Execute each tool.
     // 3. Append the tool responses as the next user turn.
     // 4. Loop: send back to model so it can produce a text answer.
-    contents.push({
-      role: 'model',
-      parts: toolCalls.map((tc) => ({
-        functionCall: { name: tc.name, args: tc.args },
-      })),
-    });
+    contents.push({ role: 'model', parts: modelResponseParts });
 
     const responseParts = [];
     for (const tc of toolCalls) {
